@@ -19,3 +19,7 @@ This project implements an hearing loss  classification model using the Vision T
 - transformers
 - scikit-learn
 - matplotlib
+
+## Result of Evaluation
+![Test Accuracy](./images/Figure_1.png)
+![Test Confusion Matrix](./images/Figure_2.png)
