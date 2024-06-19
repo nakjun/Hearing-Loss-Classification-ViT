@@ -9,7 +9,8 @@ from transformers import ViTForImageClassification, ViTImageProcessor
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-import torch.nn.functional as F
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+import itertools
 
 train_directory = './dataset/train'
 test_directory = './dataset/test'
@@ -49,8 +50,12 @@ optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
 # 모델 학습 및 저장
 os.makedirs('./models', exist_ok=True)
+train_loss_list = []
+test_accuracy_list = []
+
 for epoch in range(num_epochs):
     model.train()
+    running_loss = 0.0
     for images, labels in train_loader:
         images, labels = images.to(device), labels.to(device)
         outputs = model(images).logits
@@ -59,22 +64,55 @@ for epoch in range(num_epochs):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        
+        running_loss += loss.item()
     
-    print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
+    train_loss_list.append(running_loss / len(train_loader))
+    print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {running_loss / len(train_loader):.4f}')
     
     # 모델 저장
     torch.save(model.state_dict(), f'./models/model_epoch_{epoch+1}.pth')
 
-# 모델 평가
+    # 모델 평가
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images).logits
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    accuracy = 100 * correct / total
+    test_accuracy_list.append(accuracy)
+    print(f'Test Accuracy: {accuracy}%')
+
+# Accuracy 그래프 그리기
+plt.figure(figsize=(10,5))
+plt.plot(range(1, num_epochs+1), test_accuracy_list, label='Test Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy (%)')
+plt.title('Test Accuracy over Epochs')
+plt.legend()
+plt.show()
+
+# Confusion Matrix 생성 및 시각화
+all_preds = []
+all_labels = []
+
 model.eval()
-correct = 0
-total = 0
 with torch.no_grad():
     for images, labels in test_loader:
         images, labels = images.to(device), labels.to(device)
         outputs = model(images).logits
         _, predicted = torch.max(outputs.data, 1)
-        total += labels.size(0)
-        correct += (predicted == labels).sum().item()
+        all_preds.extend(predicted.cpu().numpy())
+        all_labels.extend(labels.cpu().numpy())
 
-print(f'Test Accuracy: {100 * correct / total}%')
+cm = confusion_matrix(all_labels, all_preds)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=test_dataset.classes)
+disp.plot(cmap=plt.cm.Blues)
+plt.title('Confusion Matrix')
+plt.show()
